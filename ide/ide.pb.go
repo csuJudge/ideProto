@@ -1438,7 +1438,7 @@ type QueryRunRsp struct {
 	Message       string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`          // 返回信息
 	Code          int32                  `protobuf:"varint,2,opt,name=code,proto3" json:"code,omitempty"`               // 返回码
 	RunID         int32                  `protobuf:"varint,3,opt,name=runID,proto3" json:"runID,omitempty"`             // 运行编号
-	Status        int32                  `protobuf:"varint,4,opt,name=status,proto3" json:"status,omitempty"`           // 状态：0=排队 1=编译中 2=运行中 3=成功 4=编译错误 5=运行错误 6=超时 7=超内存 8=执行异常
+	Status        int32                  `protobuf:"varint,4,opt,name=status,proto3" json:"status,omitempty"`           // 状态，与平台 solution.result 同码：1=排队中(<2 即待判) 2=正在编译 3=判断中(本场景=运行中) 4=正确(仅编译模式=编译通过) 7=时间超限 8=内存超限 9=输出超限 10=运行错误 11=编译错误。前端 genResult() 可直接复用
 	CompileInfo   string                 `protobuf:"bytes,5,opt,name=compileInfo,proto3" json:"compileInfo,omitempty"`  // 编译输出（含报错与警告）
 	Output        string                 `protobuf:"bytes,6,opt,name=output,proto3" json:"output,omitempty"`            // 标准输出
 	ErrorOutput   string                 `protobuf:"bytes,7,opt,name=errorOutput,proto3" json:"errorOutput,omitempty"`  // 标准错误
@@ -1708,7 +1708,7 @@ type RunRecord struct {
 	FileName      string                 `protobuf:"bytes,3,opt,name=fileName,proto3" json:"fileName,omitempty"`       // 主文件名
 	Language      int32                  `protobuf:"varint,4,opt,name=language,proto3" json:"language,omitempty"`      // 语言
 	Mode          int32                  `protobuf:"varint,5,opt,name=mode,proto3" json:"mode,omitempty"`              // 模式：1=仅编译 2=编译+运行
-	Status        int32                  `protobuf:"varint,6,opt,name=status,proto3" json:"status,omitempty"`          // 状态，口径同 QueryRunRsp.status
+	Status        int32                  `protobuf:"varint,6,opt,name=status,proto3" json:"status,omitempty"`          // 状态，口径同 QueryRunRsp.status（solution.result 码表）
 	TimeCost      int64                  `protobuf:"varint,7,opt,name=timeCost,proto3" json:"timeCost,omitempty"`      // 运行耗时，毫秒
 	MemoryCost    int32                  `protobuf:"varint,8,opt,name=memoryCost,proto3" json:"memoryCost,omitempty"`  // 峰值内存，KB
 	CreatedTime   string                 `protobuf:"bytes,9,opt,name=createdTime,proto3" json:"createdTime,omitempty"` // 提交时间
@@ -1809,198 +1809,23 @@ func (x *RunRecord) GetCreatedTime() string {
 	return ""
 }
 
-type QueryRuntimeCapabilityReq struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	UserID        int32                  `protobuf:"varint,1,opt,name=userID,proto3" json:"userID,omitempty"`     // 用户编号
-	Language      int32                  `protobuf:"varint,2,opt,name=language,proto3" json:"language,omitempty"` // 语言，-1 表示查全部
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *QueryRuntimeCapabilityReq) Reset() {
-	*x = QueryRuntimeCapabilityReq{}
-	mi := &file_ide_ide_proto_msgTypes[24]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *QueryRuntimeCapabilityReq) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*QueryRuntimeCapabilityReq) ProtoMessage() {}
-
-func (x *QueryRuntimeCapabilityReq) ProtoReflect() protoreflect.Message {
-	mi := &file_ide_ide_proto_msgTypes[24]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use QueryRuntimeCapabilityReq.ProtoReflect.Descriptor instead.
-func (*QueryRuntimeCapabilityReq) Descriptor() ([]byte, []int) {
-	return file_ide_ide_proto_rawDescGZIP(), []int{24}
-}
-
-func (x *QueryRuntimeCapabilityReq) GetUserID() int32 {
-	if x != nil {
-		return x.UserID
-	}
-	return 0
-}
-
-func (x *QueryRuntimeCapabilityReq) GetLanguage() int32 {
-	if x != nil {
-		return x.Language
-	}
-	return 0
-}
-
-type QueryRuntimeCapabilityRsp struct {
-	state              protoimpl.MessageState `protogen:"open.v1"`
-	Message            string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`                               // 返回信息
-	Code               int32                  `protobuf:"varint,2,opt,name=code,proto3" json:"code,omitempty"`                                    // 返回码
-	Available          bool                   `protobuf:"varint,3,opt,name=available,proto3" json:"available,omitempty"`                          // 沙箱整体是否可用，false 时前端置灰运行与编译
-	CompileSupported   bool                   `protobuf:"varint,4,opt,name=compileSupported,proto3" json:"compileSupported,omitempty"`            // 该语言是否支持编译
-	RunSupported       bool                   `protobuf:"varint,5,opt,name=runSupported,proto3" json:"runSupported,omitempty"`                    // 该语言是否支持运行
-	DebugSupported     bool                   `protobuf:"varint,6,opt,name=debugSupported,proto3" json:"debugSupported,omitempty"`                // 该语言是否支持调试，false 时前端隐藏调试
-	SupportedLanguages []int32                `protobuf:"varint,7,rep,packed,name=supportedLanguages,proto3" json:"supportedLanguages,omitempty"` // 支持的语言列表
-	ToolchainInfo      string                 `protobuf:"bytes,8,opt,name=toolchainInfo,proto3" json:"toolchainInfo,omitempty"`                   // 镜像内实测版本，如 "gcc 13.3.0 / gdb 15.1 / OpenJDK 11.0.33 / Python 3.12.3"
-	UnavailableReason  string                 `protobuf:"bytes,9,opt,name=unavailableReason,proto3" json:"unavailableReason,omitempty"`           // 不可用原因，给用户看
-	NetworkEnabled     bool                   `protobuf:"varint,10,opt,name=networkEnabled,proto3" json:"networkEnabled,omitempty"`               // 沙箱是否放行出网
-	SandboxNotice      string                 `protobuf:"bytes,11,opt,name=sandboxNotice,proto3" json:"sandboxNotice,omitempty"`                  // 常驻提示，如"沙箱可访问公网，禁止访问校内网"
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
-}
-
-func (x *QueryRuntimeCapabilityRsp) Reset() {
-	*x = QueryRuntimeCapabilityRsp{}
-	mi := &file_ide_ide_proto_msgTypes[25]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *QueryRuntimeCapabilityRsp) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*QueryRuntimeCapabilityRsp) ProtoMessage() {}
-
-func (x *QueryRuntimeCapabilityRsp) ProtoReflect() protoreflect.Message {
-	mi := &file_ide_ide_proto_msgTypes[25]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use QueryRuntimeCapabilityRsp.ProtoReflect.Descriptor instead.
-func (*QueryRuntimeCapabilityRsp) Descriptor() ([]byte, []int) {
-	return file_ide_ide_proto_rawDescGZIP(), []int{25}
-}
-
-func (x *QueryRuntimeCapabilityRsp) GetMessage() string {
-	if x != nil {
-		return x.Message
-	}
-	return ""
-}
-
-func (x *QueryRuntimeCapabilityRsp) GetCode() int32 {
-	if x != nil {
-		return x.Code
-	}
-	return 0
-}
-
-func (x *QueryRuntimeCapabilityRsp) GetAvailable() bool {
-	if x != nil {
-		return x.Available
-	}
-	return false
-}
-
-func (x *QueryRuntimeCapabilityRsp) GetCompileSupported() bool {
-	if x != nil {
-		return x.CompileSupported
-	}
-	return false
-}
-
-func (x *QueryRuntimeCapabilityRsp) GetRunSupported() bool {
-	if x != nil {
-		return x.RunSupported
-	}
-	return false
-}
-
-func (x *QueryRuntimeCapabilityRsp) GetDebugSupported() bool {
-	if x != nil {
-		return x.DebugSupported
-	}
-	return false
-}
-
-func (x *QueryRuntimeCapabilityRsp) GetSupportedLanguages() []int32 {
-	if x != nil {
-		return x.SupportedLanguages
-	}
-	return nil
-}
-
-func (x *QueryRuntimeCapabilityRsp) GetToolchainInfo() string {
-	if x != nil {
-		return x.ToolchainInfo
-	}
-	return ""
-}
-
-func (x *QueryRuntimeCapabilityRsp) GetUnavailableReason() string {
-	if x != nil {
-		return x.UnavailableReason
-	}
-	return ""
-}
-
-func (x *QueryRuntimeCapabilityRsp) GetNetworkEnabled() bool {
-	if x != nil {
-		return x.NetworkEnabled
-	}
-	return false
-}
-
-func (x *QueryRuntimeCapabilityRsp) GetSandboxNotice() string {
-	if x != nil {
-		return x.SandboxNotice
-	}
-	return ""
-}
-
 type StartDebugReq struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	UserID        int32                  `protobuf:"varint,1,opt,name=userID,proto3" json:"userID,omitempty"`                  // 用户编号
 	ProjectID     int32                  `protobuf:"varint,2,opt,name=projectID,proto3" json:"projectID,omitempty"`            // 项目编号
 	FileID        int32                  `protobuf:"varint,3,opt,name=fileID,proto3" json:"fileID,omitempty"`                  // 主文件编号
-	Language      int32                  `protobuf:"varint,4,opt,name=language,proto3" json:"language,omitempty"`              // 语言：0=C 1=C++ 2=Java 3=Python（当前仅支持 0 和 1）
+	Language      int32                  `protobuf:"varint,4,opt,name=language,proto3" json:"language,omitempty"`              // 语言：0=C 1=C++ 2=Java 3=Python；一期仅支持 0 与 1，其余服务端直接拒
 	Files         []*IDEFile             `protobuf:"bytes,5,rep,name=files,proto3" json:"files,omitempty"`                     // 全量文件快照，含未保存内容
 	ProgramArgs   string                 `protobuf:"bytes,6,opt,name=programArgs,proto3" json:"programArgs,omitempty"`         // 传给被调试程序的命令行参数
 	Breakpoints   []int32                `protobuf:"varint,7,rep,packed,name=breakpoints,proto3" json:"breakpoints,omitempty"` // 主文件断点行号，1 起始
+	Input         string                 `protobuf:"bytes,8,opt,name=input,proto3" json:"input,omitempty"`                     // 被调试程序的标准输入。没有它，被调试程序一 scanf 就死等
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *StartDebugReq) Reset() {
 	*x = StartDebugReq{}
-	mi := &file_ide_ide_proto_msgTypes[26]
+	mi := &file_ide_ide_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2012,7 +1837,7 @@ func (x *StartDebugReq) String() string {
 func (*StartDebugReq) ProtoMessage() {}
 
 func (x *StartDebugReq) ProtoReflect() protoreflect.Message {
-	mi := &file_ide_ide_proto_msgTypes[26]
+	mi := &file_ide_ide_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2025,7 +1850,7 @@ func (x *StartDebugReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartDebugReq.ProtoReflect.Descriptor instead.
 func (*StartDebugReq) Descriptor() ([]byte, []int) {
-	return file_ide_ide_proto_rawDescGZIP(), []int{26}
+	return file_ide_ide_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *StartDebugReq) GetUserID() int32 {
@@ -2077,6 +1902,13 @@ func (x *StartDebugReq) GetBreakpoints() []int32 {
 	return nil
 }
 
+func (x *StartDebugReq) GetInput() string {
+	if x != nil {
+		return x.Input
+	}
+	return ""
+}
+
 type StartDebugRsp struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Message       string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`     // 返回信息
@@ -2089,7 +1921,7 @@ type StartDebugRsp struct {
 
 func (x *StartDebugRsp) Reset() {
 	*x = StartDebugRsp{}
-	mi := &file_ide_ide_proto_msgTypes[27]
+	mi := &file_ide_ide_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2101,7 +1933,7 @@ func (x *StartDebugRsp) String() string {
 func (*StartDebugRsp) ProtoMessage() {}
 
 func (x *StartDebugRsp) ProtoReflect() protoreflect.Message {
-	mi := &file_ide_ide_proto_msgTypes[27]
+	mi := &file_ide_ide_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2114,7 +1946,7 @@ func (x *StartDebugRsp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartDebugRsp.ProtoReflect.Descriptor instead.
 func (*StartDebugRsp) Descriptor() ([]byte, []int) {
-	return file_ide_ide_proto_rawDescGZIP(), []int{27}
+	return file_ide_ide_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *StartDebugRsp) GetMessage() string {
@@ -2155,7 +1987,7 @@ type StopDebugReq struct {
 
 func (x *StopDebugReq) Reset() {
 	*x = StopDebugReq{}
-	mi := &file_ide_ide_proto_msgTypes[28]
+	mi := &file_ide_ide_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2167,7 +1999,7 @@ func (x *StopDebugReq) String() string {
 func (*StopDebugReq) ProtoMessage() {}
 
 func (x *StopDebugReq) ProtoReflect() protoreflect.Message {
-	mi := &file_ide_ide_proto_msgTypes[28]
+	mi := &file_ide_ide_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2180,7 +2012,7 @@ func (x *StopDebugReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StopDebugReq.ProtoReflect.Descriptor instead.
 func (*StopDebugReq) Descriptor() ([]byte, []int) {
-	return file_ide_ide_proto_rawDescGZIP(), []int{28}
+	return file_ide_ide_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *StopDebugReq) GetUserID() int32 {
@@ -2207,7 +2039,7 @@ type StepDebugReq struct {
 
 func (x *StepDebugReq) Reset() {
 	*x = StepDebugReq{}
-	mi := &file_ide_ide_proto_msgTypes[29]
+	mi := &file_ide_ide_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2219,7 +2051,7 @@ func (x *StepDebugReq) String() string {
 func (*StepDebugReq) ProtoMessage() {}
 
 func (x *StepDebugReq) ProtoReflect() protoreflect.Message {
-	mi := &file_ide_ide_proto_msgTypes[29]
+	mi := &file_ide_ide_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2232,7 +2064,7 @@ func (x *StepDebugReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StepDebugReq.ProtoReflect.Descriptor instead.
 func (*StepDebugReq) Descriptor() ([]byte, []int) {
-	return file_ide_ide_proto_rawDescGZIP(), []int{29}
+	return file_ide_ide_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *StepDebugReq) GetUserID() int32 {
@@ -2249,6 +2081,74 @@ func (x *StepDebugReq) GetSessionID() string {
 	return ""
 }
 
+type BreakpointsReq struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserID        int32                  `protobuf:"varint,1,opt,name=userID,proto3" json:"userID,omitempty"`      // 用户编号
+	SessionID     string                 `protobuf:"bytes,2,opt,name=sessionID,proto3" json:"sessionID,omitempty"` // 会话标识
+	FileID        int32                  `protobuf:"varint,3,opt,name=fileID,proto3" json:"fileID,omitempty"`      // 改哪个文件的断点，支持非主文件
+	Lines         []int32                `protobuf:"varint,4,rep,packed,name=lines,proto3" json:"lines,omitempty"` // 该文件的全量断点行号，1 起始；空数组即清空该文件断点
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BreakpointsReq) Reset() {
+	*x = BreakpointsReq{}
+	mi := &file_ide_ide_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BreakpointsReq) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BreakpointsReq) ProtoMessage() {}
+
+func (x *BreakpointsReq) ProtoReflect() protoreflect.Message {
+	mi := &file_ide_ide_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BreakpointsReq.ProtoReflect.Descriptor instead.
+func (*BreakpointsReq) Descriptor() ([]byte, []int) {
+	return file_ide_ide_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *BreakpointsReq) GetUserID() int32 {
+	if x != nil {
+		return x.UserID
+	}
+	return 0
+}
+
+func (x *BreakpointsReq) GetSessionID() string {
+	if x != nil {
+		return x.SessionID
+	}
+	return ""
+}
+
+func (x *BreakpointsReq) GetFileID() int32 {
+	if x != nil {
+		return x.FileID
+	}
+	return 0
+}
+
+func (x *BreakpointsReq) GetLines() []int32 {
+	if x != nil {
+		return x.Lines
+	}
+	return nil
+}
+
 type DebugStateRsp struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Message       string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"` // 返回信息
@@ -2260,7 +2160,7 @@ type DebugStateRsp struct {
 
 func (x *DebugStateRsp) Reset() {
 	*x = DebugStateRsp{}
-	mi := &file_ide_ide_proto_msgTypes[30]
+	mi := &file_ide_ide_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2272,7 +2172,7 @@ func (x *DebugStateRsp) String() string {
 func (*DebugStateRsp) ProtoMessage() {}
 
 func (x *DebugStateRsp) ProtoReflect() protoreflect.Message {
-	mi := &file_ide_ide_proto_msgTypes[30]
+	mi := &file_ide_ide_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2285,7 +2185,7 @@ func (x *DebugStateRsp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DebugStateRsp.ProtoReflect.Descriptor instead.
 func (*DebugStateRsp) Descriptor() ([]byte, []int) {
-	return file_ide_ide_proto_rawDescGZIP(), []int{30}
+	return file_ide_ide_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *DebugStateRsp) GetMessage() string {
@@ -2319,13 +2219,14 @@ type DebugState struct {
 	ExitCode      int32                  `protobuf:"varint,6,opt,name=exitCode,proto3" json:"exitCode,omitempty"`      // 程序退出码
 	OutputDelta   string                 `protobuf:"bytes,7,opt,name=outputDelta,proto3" json:"outputDelta,omitempty"` // 自上次调用以来的增量标准输出
 	ErrorDelta    string                 `protobuf:"bytes,8,opt,name=errorDelta,proto3" json:"errorDelta,omitempty"`   // 自上次调用以来的增量标准错误
+	Running       bool                   `protobuf:"varint,9,opt,name=running,proto3" json:"running,omitempty"`        // 程序正在跑（Continue 之后还没停住）。此时 stopped=false 且 finished=false，前端要显示运行中而不是停在某行
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DebugState) Reset() {
 	*x = DebugState{}
-	mi := &file_ide_ide_proto_msgTypes[31]
+	mi := &file_ide_ide_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2337,7 +2238,7 @@ func (x *DebugState) String() string {
 func (*DebugState) ProtoMessage() {}
 
 func (x *DebugState) ProtoReflect() protoreflect.Message {
-	mi := &file_ide_ide_proto_msgTypes[31]
+	mi := &file_ide_ide_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2350,7 +2251,7 @@ func (x *DebugState) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DebugState.ProtoReflect.Descriptor instead.
 func (*DebugState) Descriptor() ([]byte, []int) {
-	return file_ide_ide_proto_rawDescGZIP(), []int{31}
+	return file_ide_ide_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *DebugState) GetStopped() bool {
@@ -2409,6 +2310,13 @@ func (x *DebugState) GetErrorDelta() string {
 	return ""
 }
 
+func (x *DebugState) GetRunning() bool {
+	if x != nil {
+		return x.Running
+	}
+	return false
+}
+
 type StackReq struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	UserID        int32                  `protobuf:"varint,1,opt,name=userID,proto3" json:"userID,omitempty"`      // 用户编号
@@ -2419,7 +2327,7 @@ type StackReq struct {
 
 func (x *StackReq) Reset() {
 	*x = StackReq{}
-	mi := &file_ide_ide_proto_msgTypes[32]
+	mi := &file_ide_ide_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2431,7 +2339,7 @@ func (x *StackReq) String() string {
 func (*StackReq) ProtoMessage() {}
 
 func (x *StackReq) ProtoReflect() protoreflect.Message {
-	mi := &file_ide_ide_proto_msgTypes[32]
+	mi := &file_ide_ide_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2444,7 +2352,7 @@ func (x *StackReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StackReq.ProtoReflect.Descriptor instead.
 func (*StackReq) Descriptor() ([]byte, []int) {
-	return file_ide_ide_proto_rawDescGZIP(), []int{32}
+	return file_ide_ide_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *StackReq) GetUserID() int32 {
@@ -2472,7 +2380,7 @@ type StackRsp struct {
 
 func (x *StackRsp) Reset() {
 	*x = StackRsp{}
-	mi := &file_ide_ide_proto_msgTypes[33]
+	mi := &file_ide_ide_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2484,7 +2392,7 @@ func (x *StackRsp) String() string {
 func (*StackRsp) ProtoMessage() {}
 
 func (x *StackRsp) ProtoReflect() protoreflect.Message {
-	mi := &file_ide_ide_proto_msgTypes[33]
+	mi := &file_ide_ide_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2497,7 +2405,7 @@ func (x *StackRsp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StackRsp.ProtoReflect.Descriptor instead.
 func (*StackRsp) Descriptor() ([]byte, []int) {
-	return file_ide_ide_proto_rawDescGZIP(), []int{33}
+	return file_ide_ide_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *StackRsp) GetMessage() string {
@@ -2533,7 +2441,7 @@ type StackFrame struct {
 
 func (x *StackFrame) Reset() {
 	*x = StackFrame{}
-	mi := &file_ide_ide_proto_msgTypes[34]
+	mi := &file_ide_ide_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2545,7 +2453,7 @@ func (x *StackFrame) String() string {
 func (*StackFrame) ProtoMessage() {}
 
 func (x *StackFrame) ProtoReflect() protoreflect.Message {
-	mi := &file_ide_ide_proto_msgTypes[34]
+	mi := &file_ide_ide_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2558,7 +2466,7 @@ func (x *StackFrame) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StackFrame.ProtoReflect.Descriptor instead.
 func (*StackFrame) Descriptor() ([]byte, []int) {
-	return file_ide_ide_proto_rawDescGZIP(), []int{34}
+	return file_ide_ide_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *StackFrame) GetFrameID() int32 {
@@ -2601,7 +2509,7 @@ type VarsReq struct {
 
 func (x *VarsReq) Reset() {
 	*x = VarsReq{}
-	mi := &file_ide_ide_proto_msgTypes[35]
+	mi := &file_ide_ide_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2613,7 +2521,7 @@ func (x *VarsReq) String() string {
 func (*VarsReq) ProtoMessage() {}
 
 func (x *VarsReq) ProtoReflect() protoreflect.Message {
-	mi := &file_ide_ide_proto_msgTypes[35]
+	mi := &file_ide_ide_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2626,7 +2534,7 @@ func (x *VarsReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VarsReq.ProtoReflect.Descriptor instead.
 func (*VarsReq) Descriptor() ([]byte, []int) {
-	return file_ide_ide_proto_rawDescGZIP(), []int{35}
+	return file_ide_ide_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *VarsReq) GetUserID() int32 {
@@ -2668,7 +2576,7 @@ type VarsRsp struct {
 
 func (x *VarsRsp) Reset() {
 	*x = VarsRsp{}
-	mi := &file_ide_ide_proto_msgTypes[36]
+	mi := &file_ide_ide_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2680,7 +2588,7 @@ func (x *VarsRsp) String() string {
 func (*VarsRsp) ProtoMessage() {}
 
 func (x *VarsRsp) ProtoReflect() protoreflect.Message {
-	mi := &file_ide_ide_proto_msgTypes[36]
+	mi := &file_ide_ide_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2693,7 +2601,7 @@ func (x *VarsRsp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VarsRsp.ProtoReflect.Descriptor instead.
 func (*VarsRsp) Descriptor() ([]byte, []int) {
-	return file_ide_ide_proto_rawDescGZIP(), []int{36}
+	return file_ide_ide_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *VarsRsp) GetMessage() string {
@@ -2730,7 +2638,7 @@ type Variable struct {
 
 func (x *Variable) Reset() {
 	*x = Variable{}
-	mi := &file_ide_ide_proto_msgTypes[37]
+	mi := &file_ide_ide_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2742,7 +2650,7 @@ func (x *Variable) String() string {
 func (*Variable) ProtoMessage() {}
 
 func (x *Variable) ProtoReflect() protoreflect.Message {
-	mi := &file_ide_ide_proto_msgTypes[37]
+	mi := &file_ide_ide_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2755,7 +2663,7 @@ func (x *Variable) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Variable.ProtoReflect.Descriptor instead.
 func (*Variable) Descriptor() ([]byte, []int) {
-	return file_ide_ide_proto_rawDescGZIP(), []int{37}
+	return file_ide_ide_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *Variable) GetVariableID() int32 {
@@ -2805,7 +2713,7 @@ type EvaluateReq struct {
 
 func (x *EvaluateReq) Reset() {
 	*x = EvaluateReq{}
-	mi := &file_ide_ide_proto_msgTypes[38]
+	mi := &file_ide_ide_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2817,7 +2725,7 @@ func (x *EvaluateReq) String() string {
 func (*EvaluateReq) ProtoMessage() {}
 
 func (x *EvaluateReq) ProtoReflect() protoreflect.Message {
-	mi := &file_ide_ide_proto_msgTypes[38]
+	mi := &file_ide_ide_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2830,7 +2738,7 @@ func (x *EvaluateReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EvaluateReq.ProtoReflect.Descriptor instead.
 func (*EvaluateReq) Descriptor() ([]byte, []int) {
-	return file_ide_ide_proto_rawDescGZIP(), []int{38}
+	return file_ide_ide_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *EvaluateReq) GetUserID() int32 {
@@ -2873,7 +2781,7 @@ type EvaluateRsp struct {
 
 func (x *EvaluateRsp) Reset() {
 	*x = EvaluateRsp{}
-	mi := &file_ide_ide_proto_msgTypes[39]
+	mi := &file_ide_ide_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2885,7 +2793,7 @@ func (x *EvaluateRsp) String() string {
 func (*EvaluateRsp) ProtoMessage() {}
 
 func (x *EvaluateRsp) ProtoReflect() protoreflect.Message {
-	mi := &file_ide_ide_proto_msgTypes[39]
+	mi := &file_ide_ide_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2898,7 +2806,7 @@ func (x *EvaluateRsp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EvaluateRsp.ProtoReflect.Descriptor instead.
 func (*EvaluateRsp) Descriptor() ([]byte, []int) {
-	return file_ide_ide_proto_rawDescGZIP(), []int{39}
+	return file_ide_ide_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *EvaluateRsp) GetMessage() string {
@@ -2939,7 +2847,7 @@ type OutputReq struct {
 
 func (x *OutputReq) Reset() {
 	*x = OutputReq{}
-	mi := &file_ide_ide_proto_msgTypes[40]
+	mi := &file_ide_ide_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2951,7 +2859,7 @@ func (x *OutputReq) String() string {
 func (*OutputReq) ProtoMessage() {}
 
 func (x *OutputReq) ProtoReflect() protoreflect.Message {
-	mi := &file_ide_ide_proto_msgTypes[40]
+	mi := &file_ide_ide_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2964,7 +2872,7 @@ func (x *OutputReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OutputReq.ProtoReflect.Descriptor instead.
 func (*OutputReq) Descriptor() ([]byte, []int) {
-	return file_ide_ide_proto_rawDescGZIP(), []int{40}
+	return file_ide_ide_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *OutputReq) GetUserID() int32 {
@@ -2993,7 +2901,7 @@ type OutputRsp struct {
 
 func (x *OutputRsp) Reset() {
 	*x = OutputRsp{}
-	mi := &file_ide_ide_proto_msgTypes[41]
+	mi := &file_ide_ide_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3005,7 +2913,7 @@ func (x *OutputRsp) String() string {
 func (*OutputRsp) ProtoMessage() {}
 
 func (x *OutputRsp) ProtoReflect() protoreflect.Message {
-	mi := &file_ide_ide_proto_msgTypes[41]
+	mi := &file_ide_ide_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3018,7 +2926,7 @@ func (x *OutputRsp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OutputRsp.ProtoReflect.Descriptor instead.
 func (*OutputRsp) Descriptor() ([]byte, []int) {
-	return file_ide_ide_proto_rawDescGZIP(), []int{41}
+	return file_ide_ide_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *OutputRsp) GetMessage() string {
@@ -3200,23 +3108,7 @@ const file_ide_ide_proto_rawDesc = "" +
 	"\n" +
 	"memoryCost\x18\b \x01(\x05R\n" +
 	"memoryCost\x12 \n" +
-	"\vcreatedTime\x18\t \x01(\tR\vcreatedTime\"O\n" +
-	"\x19QueryRuntimeCapabilityReq\x12\x16\n" +
-	"\x06userID\x18\x01 \x01(\x05R\x06userID\x12\x1a\n" +
-	"\blanguage\x18\x02 \x01(\x05R\blanguage\"\xb1\x03\n" +
-	"\x19QueryRuntimeCapabilityRsp\x12\x18\n" +
-	"\amessage\x18\x01 \x01(\tR\amessage\x12\x12\n" +
-	"\x04code\x18\x02 \x01(\x05R\x04code\x12\x1c\n" +
-	"\tavailable\x18\x03 \x01(\bR\tavailable\x12*\n" +
-	"\x10compileSupported\x18\x04 \x01(\bR\x10compileSupported\x12\"\n" +
-	"\frunSupported\x18\x05 \x01(\bR\frunSupported\x12&\n" +
-	"\x0edebugSupported\x18\x06 \x01(\bR\x0edebugSupported\x12.\n" +
-	"\x12supportedLanguages\x18\a \x03(\x05R\x12supportedLanguages\x12$\n" +
-	"\rtoolchainInfo\x18\b \x01(\tR\rtoolchainInfo\x12,\n" +
-	"\x11unavailableReason\x18\t \x01(\tR\x11unavailableReason\x12&\n" +
-	"\x0enetworkEnabled\x18\n" +
-	" \x01(\bR\x0enetworkEnabled\x12$\n" +
-	"\rsandboxNotice\x18\v \x01(\tR\rsandboxNotice\"\xe4\x01\n" +
+	"\vcreatedTime\x18\t \x01(\tR\vcreatedTime\"\xfa\x01\n" +
 	"\rStartDebugReq\x12\x16\n" +
 	"\x06userID\x18\x01 \x01(\x05R\x06userID\x12\x1c\n" +
 	"\tprojectID\x18\x02 \x01(\x05R\tprojectID\x12\x16\n" +
@@ -3224,7 +3116,8 @@ const file_ide_ide_proto_rawDesc = "" +
 	"\blanguage\x18\x04 \x01(\x05R\blanguage\x12%\n" +
 	"\x05files\x18\x05 \x03(\v2\x0f.oj.ide.IDEFileR\x05files\x12 \n" +
 	"\vprogramArgs\x18\x06 \x01(\tR\vprogramArgs\x12 \n" +
-	"\vbreakpoints\x18\a \x03(\x05R\vbreakpoints\"\x85\x01\n" +
+	"\vbreakpoints\x18\a \x03(\x05R\vbreakpoints\x12\x14\n" +
+	"\x05input\x18\b \x01(\tR\x05input\"\x85\x01\n" +
 	"\rStartDebugRsp\x12\x18\n" +
 	"\amessage\x18\x01 \x01(\tR\amessage\x12\x12\n" +
 	"\x04code\x18\x02 \x01(\x05R\x04code\x12\x1c\n" +
@@ -3235,11 +3128,16 @@ const file_ide_ide_proto_rawDesc = "" +
 	"\tsessionID\x18\x02 \x01(\tR\tsessionID\"D\n" +
 	"\fStepDebugReq\x12\x16\n" +
 	"\x06userID\x18\x01 \x01(\x05R\x06userID\x12\x1c\n" +
-	"\tsessionID\x18\x02 \x01(\tR\tsessionID\"g\n" +
+	"\tsessionID\x18\x02 \x01(\tR\tsessionID\"t\n" +
+	"\x0eBreakpointsReq\x12\x16\n" +
+	"\x06userID\x18\x01 \x01(\x05R\x06userID\x12\x1c\n" +
+	"\tsessionID\x18\x02 \x01(\tR\tsessionID\x12\x16\n" +
+	"\x06fileID\x18\x03 \x01(\x05R\x06fileID\x12\x14\n" +
+	"\x05lines\x18\x04 \x03(\x05R\x05lines\"g\n" +
 	"\rDebugStateRsp\x12\x18\n" +
 	"\amessage\x18\x01 \x01(\tR\amessage\x12\x12\n" +
 	"\x04code\x18\x02 \x01(\x05R\x04code\x12(\n" +
-	"\x05state\x18\x03 \x01(\v2\x12.oj.ide.DebugStateR\x05state\"\xe8\x01\n" +
+	"\x05state\x18\x03 \x01(\v2\x12.oj.ide.DebugStateR\x05state\"\x82\x02\n" +
 	"\n" +
 	"DebugState\x12\x18\n" +
 	"\astopped\x18\x01 \x01(\bR\astopped\x12\x16\n" +
@@ -3251,7 +3149,8 @@ const file_ide_ide_proto_rawDesc = "" +
 	"\voutputDelta\x18\a \x01(\tR\voutputDelta\x12\x1e\n" +
 	"\n" +
 	"errorDelta\x18\b \x01(\tR\n" +
-	"errorDelta\"@\n" +
+	"errorDelta\x12\x18\n" +
+	"\arunning\x18\t \x01(\bR\arunning\"@\n" +
 	"\bStackReq\x12\x16\n" +
 	"\x06userID\x18\x01 \x01(\x05R\x06userID\x12\x1c\n" +
 	"\tsessionID\x18\x02 \x01(\tR\tsessionID\"d\n" +
@@ -3317,16 +3216,16 @@ const file_ide_ide_proto_rawDesc = "" +
 	"\n" +
 	"UpdateFile\x12\x15.oj.ide.UpdateFileReq\x1a\x11.oj.ide.CommonRsp\"\x00\x12D\n" +
 	"\x10UpdateFileStatus\x12\x1b.oj.ide.UpdateFileStatusReq\x1a\x11.oj.ide.CommonRsp\"\x00\x12Z\n" +
-	"\x14QueryImportableFiles\x12\x1f.oj.ide.QueryImportableFilesReq\x1a\x1f.oj.ide.QueryImportableFilesRsp\"\x002\xb0\x02\n" +
+	"\x14QueryImportableFiles\x12\x1f.oj.ide.QueryImportableFilesReq\x1a\x1f.oj.ide.QueryImportableFilesRsp\"\x002\xce\x01\n" +
 	"\fIDERunServer\x129\n" +
 	"\tSubmitRun\x12\x14.oj.ide.SubmitRunReq\x1a\x14.oj.ide.SubmitRunRsp\"\x00\x126\n" +
 	"\bQueryRun\x12\x13.oj.ide.QueryRunReq\x1a\x13.oj.ide.QueryRunRsp\"\x00\x12K\n" +
-	"\x0fQueryRunHistory\x12\x1a.oj.ide.QueryRunHistoryReq\x1a\x1a.oj.ide.QueryRunHistoryRsp\"\x00\x12`\n" +
-	"\x16QueryRuntimeCapability\x12!.oj.ide.QueryRuntimeCapabilityReq\x1a!.oj.ide.QueryRuntimeCapabilityRsp\"\x002\x91\x05\n" +
+	"\x0fQueryRunHistory\x12\x1a.oj.ide.QueryRunHistoryReq\x1a\x1a.oj.ide.QueryRunHistoryRsp\"\x002\xd7\x05\n" +
 	"\x0eIDEDebugServer\x12<\n" +
 	"\n" +
 	"StartDebug\x12\x15.oj.ide.StartDebugReq\x1a\x15.oj.ide.StartDebugRsp\"\x00\x126\n" +
-	"\tStopDebug\x12\x14.oj.ide.StopDebugReq\x1a\x11.oj.ide.CommonRsp\"\x00\x129\n" +
+	"\tStopDebug\x12\x14.oj.ide.StopDebugReq\x1a\x11.oj.ide.CommonRsp\"\x00\x12D\n" +
+	"\x11UpdateBreakpoints\x12\x16.oj.ide.BreakpointsReq\x1a\x15.oj.ide.DebugStateRsp\"\x00\x129\n" +
 	"\bStepOver\x12\x14.oj.ide.StepDebugReq\x1a\x15.oj.ide.DebugStateRsp\"\x00\x127\n" +
 	"\x06StepIn\x12\x14.oj.ide.StepDebugReq\x1a\x15.oj.ide.DebugStateRsp\"\x00\x128\n" +
 	"\aStepOut\x12\x14.oj.ide.StepDebugReq\x1a\x15.oj.ide.DebugStateRsp\"\x00\x12>\n" +
@@ -3350,50 +3249,49 @@ func file_ide_ide_proto_rawDescGZIP() []byte {
 	return file_ide_ide_proto_rawDescData
 }
 
-var file_ide_ide_proto_msgTypes = make([]protoimpl.MessageInfo, 42)
+var file_ide_ide_proto_msgTypes = make([]protoimpl.MessageInfo, 41)
 var file_ide_ide_proto_goTypes = []any{
-	(*CommonRsp)(nil),                 // 0: oj.ide.CommonRsp
-	(*IDEFile)(nil),                   // 1: oj.ide.IDEFile
-	(*IDEProject)(nil),                // 2: oj.ide.IDEProject
-	(*QueryProjectListReq)(nil),       // 3: oj.ide.QueryProjectListReq
-	(*QueryProjectListRsp)(nil),       // 4: oj.ide.QueryProjectListRsp
-	(*AddProjectReq)(nil),             // 5: oj.ide.AddProjectReq
-	(*AddProjectRsp)(nil),             // 6: oj.ide.AddProjectRsp
-	(*UpdateProjectReq)(nil),          // 7: oj.ide.UpdateProjectReq
-	(*UpdateProjectStatusReq)(nil),    // 8: oj.ide.UpdateProjectStatusReq
-	(*QueryProjectReq)(nil),           // 9: oj.ide.QueryProjectReq
-	(*QueryProjectRsp)(nil),           // 10: oj.ide.QueryProjectRsp
-	(*AddFileReq)(nil),                // 11: oj.ide.AddFileReq
-	(*AddFileRsp)(nil),                // 12: oj.ide.AddFileRsp
-	(*UpdateFileReq)(nil),             // 13: oj.ide.UpdateFileReq
-	(*UpdateFileStatusReq)(nil),       // 14: oj.ide.UpdateFileStatusReq
-	(*QueryImportableFilesReq)(nil),   // 15: oj.ide.QueryImportableFilesReq
-	(*QueryImportableFilesRsp)(nil),   // 16: oj.ide.QueryImportableFilesRsp
-	(*SubmitRunReq)(nil),              // 17: oj.ide.SubmitRunReq
-	(*SubmitRunRsp)(nil),              // 18: oj.ide.SubmitRunRsp
-	(*QueryRunReq)(nil),               // 19: oj.ide.QueryRunReq
-	(*QueryRunRsp)(nil),               // 20: oj.ide.QueryRunRsp
-	(*QueryRunHistoryReq)(nil),        // 21: oj.ide.QueryRunHistoryReq
-	(*QueryRunHistoryRsp)(nil),        // 22: oj.ide.QueryRunHistoryRsp
-	(*RunRecord)(nil),                 // 23: oj.ide.RunRecord
-	(*QueryRuntimeCapabilityReq)(nil), // 24: oj.ide.QueryRuntimeCapabilityReq
-	(*QueryRuntimeCapabilityRsp)(nil), // 25: oj.ide.QueryRuntimeCapabilityRsp
-	(*StartDebugReq)(nil),             // 26: oj.ide.StartDebugReq
-	(*StartDebugRsp)(nil),             // 27: oj.ide.StartDebugRsp
-	(*StopDebugReq)(nil),              // 28: oj.ide.StopDebugReq
-	(*StepDebugReq)(nil),              // 29: oj.ide.StepDebugReq
-	(*DebugStateRsp)(nil),             // 30: oj.ide.DebugStateRsp
-	(*DebugState)(nil),                // 31: oj.ide.DebugState
-	(*StackReq)(nil),                  // 32: oj.ide.StackReq
-	(*StackRsp)(nil),                  // 33: oj.ide.StackRsp
-	(*StackFrame)(nil),                // 34: oj.ide.StackFrame
-	(*VarsReq)(nil),                   // 35: oj.ide.VarsReq
-	(*VarsRsp)(nil),                   // 36: oj.ide.VarsRsp
-	(*Variable)(nil),                  // 37: oj.ide.Variable
-	(*EvaluateReq)(nil),               // 38: oj.ide.EvaluateReq
-	(*EvaluateRsp)(nil),               // 39: oj.ide.EvaluateRsp
-	(*OutputReq)(nil),                 // 40: oj.ide.OutputReq
-	(*OutputRsp)(nil),                 // 41: oj.ide.OutputRsp
+	(*CommonRsp)(nil),               // 0: oj.ide.CommonRsp
+	(*IDEFile)(nil),                 // 1: oj.ide.IDEFile
+	(*IDEProject)(nil),              // 2: oj.ide.IDEProject
+	(*QueryProjectListReq)(nil),     // 3: oj.ide.QueryProjectListReq
+	(*QueryProjectListRsp)(nil),     // 4: oj.ide.QueryProjectListRsp
+	(*AddProjectReq)(nil),           // 5: oj.ide.AddProjectReq
+	(*AddProjectRsp)(nil),           // 6: oj.ide.AddProjectRsp
+	(*UpdateProjectReq)(nil),        // 7: oj.ide.UpdateProjectReq
+	(*UpdateProjectStatusReq)(nil),  // 8: oj.ide.UpdateProjectStatusReq
+	(*QueryProjectReq)(nil),         // 9: oj.ide.QueryProjectReq
+	(*QueryProjectRsp)(nil),         // 10: oj.ide.QueryProjectRsp
+	(*AddFileReq)(nil),              // 11: oj.ide.AddFileReq
+	(*AddFileRsp)(nil),              // 12: oj.ide.AddFileRsp
+	(*UpdateFileReq)(nil),           // 13: oj.ide.UpdateFileReq
+	(*UpdateFileStatusReq)(nil),     // 14: oj.ide.UpdateFileStatusReq
+	(*QueryImportableFilesReq)(nil), // 15: oj.ide.QueryImportableFilesReq
+	(*QueryImportableFilesRsp)(nil), // 16: oj.ide.QueryImportableFilesRsp
+	(*SubmitRunReq)(nil),            // 17: oj.ide.SubmitRunReq
+	(*SubmitRunRsp)(nil),            // 18: oj.ide.SubmitRunRsp
+	(*QueryRunReq)(nil),             // 19: oj.ide.QueryRunReq
+	(*QueryRunRsp)(nil),             // 20: oj.ide.QueryRunRsp
+	(*QueryRunHistoryReq)(nil),      // 21: oj.ide.QueryRunHistoryReq
+	(*QueryRunHistoryRsp)(nil),      // 22: oj.ide.QueryRunHistoryRsp
+	(*RunRecord)(nil),               // 23: oj.ide.RunRecord
+	(*StartDebugReq)(nil),           // 24: oj.ide.StartDebugReq
+	(*StartDebugRsp)(nil),           // 25: oj.ide.StartDebugRsp
+	(*StopDebugReq)(nil),            // 26: oj.ide.StopDebugReq
+	(*StepDebugReq)(nil),            // 27: oj.ide.StepDebugReq
+	(*BreakpointsReq)(nil),          // 28: oj.ide.BreakpointsReq
+	(*DebugStateRsp)(nil),           // 29: oj.ide.DebugStateRsp
+	(*DebugState)(nil),              // 30: oj.ide.DebugState
+	(*StackReq)(nil),                // 31: oj.ide.StackReq
+	(*StackRsp)(nil),                // 32: oj.ide.StackRsp
+	(*StackFrame)(nil),              // 33: oj.ide.StackFrame
+	(*VarsReq)(nil),                 // 34: oj.ide.VarsReq
+	(*VarsRsp)(nil),                 // 35: oj.ide.VarsRsp
+	(*Variable)(nil),                // 36: oj.ide.Variable
+	(*EvaluateReq)(nil),             // 37: oj.ide.EvaluateReq
+	(*EvaluateRsp)(nil),             // 38: oj.ide.EvaluateRsp
+	(*OutputReq)(nil),               // 39: oj.ide.OutputReq
+	(*OutputRsp)(nil),               // 40: oj.ide.OutputRsp
 }
 var file_ide_ide_proto_depIdxs = []int32{
 	1,  // 0: oj.ide.IDEProject.files:type_name -> oj.ide.IDEFile
@@ -3404,10 +3302,10 @@ var file_ide_ide_proto_depIdxs = []int32{
 	1,  // 5: oj.ide.SubmitRunReq.files:type_name -> oj.ide.IDEFile
 	23, // 6: oj.ide.QueryRunHistoryRsp.records:type_name -> oj.ide.RunRecord
 	1,  // 7: oj.ide.StartDebugReq.files:type_name -> oj.ide.IDEFile
-	31, // 8: oj.ide.StartDebugRsp.state:type_name -> oj.ide.DebugState
-	31, // 9: oj.ide.DebugStateRsp.state:type_name -> oj.ide.DebugState
-	34, // 10: oj.ide.StackRsp.frames:type_name -> oj.ide.StackFrame
-	37, // 11: oj.ide.VarsRsp.variables:type_name -> oj.ide.Variable
+	30, // 8: oj.ide.StartDebugRsp.state:type_name -> oj.ide.DebugState
+	30, // 9: oj.ide.DebugStateRsp.state:type_name -> oj.ide.DebugState
+	33, // 10: oj.ide.StackRsp.frames:type_name -> oj.ide.StackFrame
+	36, // 11: oj.ide.VarsRsp.variables:type_name -> oj.ide.Variable
 	3,  // 12: oj.ide.IDEServer.QueryProjectList:input_type -> oj.ide.QueryProjectListReq
 	5,  // 13: oj.ide.IDEServer.AddProject:input_type -> oj.ide.AddProjectReq
 	7,  // 14: oj.ide.IDEServer.UpdateProject:input_type -> oj.ide.UpdateProjectReq
@@ -3420,18 +3318,18 @@ var file_ide_ide_proto_depIdxs = []int32{
 	17, // 21: oj.ide.IDERunServer.SubmitRun:input_type -> oj.ide.SubmitRunReq
 	19, // 22: oj.ide.IDERunServer.QueryRun:input_type -> oj.ide.QueryRunReq
 	21, // 23: oj.ide.IDERunServer.QueryRunHistory:input_type -> oj.ide.QueryRunHistoryReq
-	24, // 24: oj.ide.IDERunServer.QueryRuntimeCapability:input_type -> oj.ide.QueryRuntimeCapabilityReq
-	26, // 25: oj.ide.IDEDebugServer.StartDebug:input_type -> oj.ide.StartDebugReq
-	28, // 26: oj.ide.IDEDebugServer.StopDebug:input_type -> oj.ide.StopDebugReq
-	29, // 27: oj.ide.IDEDebugServer.StepOver:input_type -> oj.ide.StepDebugReq
-	29, // 28: oj.ide.IDEDebugServer.StepIn:input_type -> oj.ide.StepDebugReq
-	29, // 29: oj.ide.IDEDebugServer.StepOut:input_type -> oj.ide.StepDebugReq
-	29, // 30: oj.ide.IDEDebugServer.ContinueDebug:input_type -> oj.ide.StepDebugReq
-	29, // 31: oj.ide.IDEDebugServer.PauseDebug:input_type -> oj.ide.StepDebugReq
-	32, // 32: oj.ide.IDEDebugServer.GetStackFrames:input_type -> oj.ide.StackReq
-	35, // 33: oj.ide.IDEDebugServer.GetVariables:input_type -> oj.ide.VarsReq
-	38, // 34: oj.ide.IDEDebugServer.Evaluate:input_type -> oj.ide.EvaluateReq
-	40, // 35: oj.ide.IDEDebugServer.QueryDebugOutput:input_type -> oj.ide.OutputReq
+	24, // 24: oj.ide.IDEDebugServer.StartDebug:input_type -> oj.ide.StartDebugReq
+	26, // 25: oj.ide.IDEDebugServer.StopDebug:input_type -> oj.ide.StopDebugReq
+	28, // 26: oj.ide.IDEDebugServer.UpdateBreakpoints:input_type -> oj.ide.BreakpointsReq
+	27, // 27: oj.ide.IDEDebugServer.StepOver:input_type -> oj.ide.StepDebugReq
+	27, // 28: oj.ide.IDEDebugServer.StepIn:input_type -> oj.ide.StepDebugReq
+	27, // 29: oj.ide.IDEDebugServer.StepOut:input_type -> oj.ide.StepDebugReq
+	27, // 30: oj.ide.IDEDebugServer.ContinueDebug:input_type -> oj.ide.StepDebugReq
+	27, // 31: oj.ide.IDEDebugServer.PauseDebug:input_type -> oj.ide.StepDebugReq
+	31, // 32: oj.ide.IDEDebugServer.GetStackFrames:input_type -> oj.ide.StackReq
+	34, // 33: oj.ide.IDEDebugServer.GetVariables:input_type -> oj.ide.VarsReq
+	37, // 34: oj.ide.IDEDebugServer.Evaluate:input_type -> oj.ide.EvaluateReq
+	39, // 35: oj.ide.IDEDebugServer.QueryDebugOutput:input_type -> oj.ide.OutputReq
 	4,  // 36: oj.ide.IDEServer.QueryProjectList:output_type -> oj.ide.QueryProjectListRsp
 	6,  // 37: oj.ide.IDEServer.AddProject:output_type -> oj.ide.AddProjectRsp
 	0,  // 38: oj.ide.IDEServer.UpdateProject:output_type -> oj.ide.CommonRsp
@@ -3444,18 +3342,18 @@ var file_ide_ide_proto_depIdxs = []int32{
 	18, // 45: oj.ide.IDERunServer.SubmitRun:output_type -> oj.ide.SubmitRunRsp
 	20, // 46: oj.ide.IDERunServer.QueryRun:output_type -> oj.ide.QueryRunRsp
 	22, // 47: oj.ide.IDERunServer.QueryRunHistory:output_type -> oj.ide.QueryRunHistoryRsp
-	25, // 48: oj.ide.IDERunServer.QueryRuntimeCapability:output_type -> oj.ide.QueryRuntimeCapabilityRsp
-	27, // 49: oj.ide.IDEDebugServer.StartDebug:output_type -> oj.ide.StartDebugRsp
-	0,  // 50: oj.ide.IDEDebugServer.StopDebug:output_type -> oj.ide.CommonRsp
-	30, // 51: oj.ide.IDEDebugServer.StepOver:output_type -> oj.ide.DebugStateRsp
-	30, // 52: oj.ide.IDEDebugServer.StepIn:output_type -> oj.ide.DebugStateRsp
-	30, // 53: oj.ide.IDEDebugServer.StepOut:output_type -> oj.ide.DebugStateRsp
-	30, // 54: oj.ide.IDEDebugServer.ContinueDebug:output_type -> oj.ide.DebugStateRsp
-	30, // 55: oj.ide.IDEDebugServer.PauseDebug:output_type -> oj.ide.DebugStateRsp
-	33, // 56: oj.ide.IDEDebugServer.GetStackFrames:output_type -> oj.ide.StackRsp
-	36, // 57: oj.ide.IDEDebugServer.GetVariables:output_type -> oj.ide.VarsRsp
-	39, // 58: oj.ide.IDEDebugServer.Evaluate:output_type -> oj.ide.EvaluateRsp
-	41, // 59: oj.ide.IDEDebugServer.QueryDebugOutput:output_type -> oj.ide.OutputRsp
+	25, // 48: oj.ide.IDEDebugServer.StartDebug:output_type -> oj.ide.StartDebugRsp
+	0,  // 49: oj.ide.IDEDebugServer.StopDebug:output_type -> oj.ide.CommonRsp
+	29, // 50: oj.ide.IDEDebugServer.UpdateBreakpoints:output_type -> oj.ide.DebugStateRsp
+	29, // 51: oj.ide.IDEDebugServer.StepOver:output_type -> oj.ide.DebugStateRsp
+	29, // 52: oj.ide.IDEDebugServer.StepIn:output_type -> oj.ide.DebugStateRsp
+	29, // 53: oj.ide.IDEDebugServer.StepOut:output_type -> oj.ide.DebugStateRsp
+	29, // 54: oj.ide.IDEDebugServer.ContinueDebug:output_type -> oj.ide.DebugStateRsp
+	29, // 55: oj.ide.IDEDebugServer.PauseDebug:output_type -> oj.ide.DebugStateRsp
+	32, // 56: oj.ide.IDEDebugServer.GetStackFrames:output_type -> oj.ide.StackRsp
+	35, // 57: oj.ide.IDEDebugServer.GetVariables:output_type -> oj.ide.VarsRsp
+	38, // 58: oj.ide.IDEDebugServer.Evaluate:output_type -> oj.ide.EvaluateRsp
+	40, // 59: oj.ide.IDEDebugServer.QueryDebugOutput:output_type -> oj.ide.OutputRsp
 	36, // [36:60] is the sub-list for method output_type
 	12, // [12:36] is the sub-list for method input_type
 	12, // [12:12] is the sub-list for extension type_name
@@ -3474,7 +3372,7 @@ func file_ide_ide_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_ide_ide_proto_rawDesc), len(file_ide_ide_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   42,
+			NumMessages:   41,
 			NumExtensions: 0,
 			NumServices:   3,
 		},

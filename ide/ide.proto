@@ -26,8 +26,9 @@ service IDEServer {
   rpc QueryImportableFiles(QueryImportableFilesReq) returns (QueryImportableFilesRsp) {}
 }
 
-// IDERunServer：编译与运行。每次执行起一个容器沙箱，
-// Docker 或运行时镜像异常时这一组接口整体降级。
+// IDERunServer：编译与运行。本服务的实现只负责往 ide_run 落一行待判记录、以及查询
+// 结果；真正起容器编译运行、把状态与输出回填进表的是 ide_judge 守护进程。
+// 沙箱挂了表现为一行行待判记录堆积，本服务的 CRUD 与查询不受影响。
 service IDERunServer {
   // SubmitRun 提交一次编译或运行，落队列表后立即返回 runID，不阻塞
   rpc SubmitRun(SubmitRunReq) returns (SubmitRunRsp) {}
@@ -35,17 +36,20 @@ service IDERunServer {
   rpc QueryRun(QueryRunReq) returns (QueryRunRsp) {}
   // QueryRunHistory 查询某项目的运行历史，按时间倒序
   rpc QueryRunHistory(QueryRunHistoryReq) returns (QueryRunHistoryRsp) {}
-  // QueryRuntimeCapability 探测沙箱可用性与工具链版本，前端据此置灰按钮、显示版本
-  rpc QueryRuntimeCapability(QueryRuntimeCapabilityReq) returns (QueryRuntimeCapabilityRsp) {}
 }
 
 // IDEDebugServer：交互式单步调试。会话有状态，绑定一个长驻沙箱容器与其中的 gdb/MI 进程，
-// 是三者中唯一可能单独拆进程部署的一块。会话空闲超时会回收，服务重启后旧会话一律失效。
+// 因此实现落在持有 Docker 的 ide_judge；oj_ide_svr 只做转发，前端仍然只面对 svr 一个地址。
+// 一期只支持 C 与 C++（gdb MI）；Python 走 debugpy、Java 走 JDWP 排在后两期。
+// 会话空闲超时会回收，进程重启后旧会话一律失效。
 service IDEDebugServer {
   // StartDebug 建会话：上传代码快照、以 -g -O0 编译、起 gdb、停在第一个断点
   rpc StartDebug(StartDebugReq) returns (StartDebugRsp) {}
   // StopDebug 结束会话并销毁容器
   rpc StopDebug(StopDebugReq) returns (CommonRsp) {}
+  // UpdateBreakpoints 运行中改断点：按文件幂等覆盖，lines 为空即清空该文件断点。
+  // 没有它就只有 StartDebugReq.breakpoints 那一次机会，跑起来再点断点没接口可走
+  rpc UpdateBreakpoints(BreakpointsReq) returns (DebugStateRsp) {}
   // StepOver 单步跳过（f10，不进入函数）
   rpc StepOver(StepDebugReq) returns (DebugStateRsp) {}
   // StepIn 单步进入（f11，进入函数内部）
@@ -213,7 +217,7 @@ message QueryRunRsp {
   string message = 1;   // 返回信息
   int32 code     = 2;   // 返回码
   int32 runID    = 3;   // 运行编号
-  int32 status   = 4;   // 状态：0=排队 1=编译中 2=运行中 3=成功 4=编译错误 5=运行错误 6=超时 7=超内存 8=执行异常
+  int32 status   = 4;   // 状态，与平台 solution.result 同码：1=排队中(<2 即待判) 2=正在编译 3=判断中(本场景=运行中) 4=正确(仅编译模式=编译通过) 7=时间超限 8=内存超限 9=输出超限 10=运行错误 11=编译错误。前端 genResult() 可直接复用
   string compileInfo = 5; // 编译输出（含报错与警告）
   string output = 6;    // 标准输出
   string errorOutput = 7; // 标准错误
@@ -241,30 +245,10 @@ message RunRecord {
   string fileName = 3; // 主文件名
   int32 language = 4; // 语言
   int32 mode     = 5; // 模式：1=仅编译 2=编译+运行
-  int32 status   = 6; // 状态，口径同 QueryRunRsp.status
+  int32 status   = 6; // 状态，口径同 QueryRunRsp.status（solution.result 码表）
   int64 timeCost = 7; // 运行耗时，毫秒
   int32 memoryCost = 8; // 峰值内存，KB
   string createdTime = 9; // 提交时间
-}
-
-// ---------------- 运行时能力 ----------------
-
-message QueryRuntimeCapabilityReq {
-  int32 userID = 1;   // 用户编号
-  int32 language = 2; // 语言，-1 表示查全部
-}
-message QueryRuntimeCapabilityRsp {
-  string message = 1; // 返回信息
-  int32 code     = 2; // 返回码
-  bool available = 3; // 沙箱整体是否可用，false 时前端置灰运行与编译
-  bool compileSupported = 4; // 该语言是否支持编译
-  bool runSupported = 5;     // 该语言是否支持运行
-  bool debugSupported = 6;   // 该语言是否支持调试，false 时前端隐藏调试
-  repeated int32 supportedLanguages = 7; // 支持的语言列表
-  string toolchainInfo = 8;  // 镜像内实测版本，如 "gcc 13.3.0 / gdb 15.1 / OpenJDK 11.0.33 / Python 3.12.3"
-  string unavailableReason = 9; // 不可用原因，给用户看
-  bool networkEnabled = 10;  // 沙箱是否放行出网
-  string sandboxNotice = 11; // 常驻提示，如"沙箱可访问公网，禁止访问校内网"
 }
 
 // ---------------- 调试 ----------------
@@ -273,10 +257,11 @@ message StartDebugReq {
   int32 userID = 1;    // 用户编号
   int32 projectID = 2; // 项目编号
   int32 fileID   = 3;  // 主文件编号
-  int32 language = 4;  // 语言：0=C 1=C++ 2=Java 3=Python（当前仅支持 0 和 1）
+  int32 language = 4;  // 语言：0=C 1=C++ 2=Java 3=Python；一期仅支持 0 与 1，其余服务端直接拒
   repeated IDEFile files = 5; // 全量文件快照，含未保存内容
   string programArgs = 6;     // 传给被调试程序的命令行参数
   repeated int32 breakpoints = 7; // 主文件断点行号，1 起始
+  string input = 8;      // 被调试程序的标准输入。没有它，被调试程序一 scanf 就死等
 }
 message StartDebugRsp {
   string message = 1;  // 返回信息
@@ -292,6 +277,13 @@ message StepDebugReq {
   int32 userID = 1;    // 用户编号
   string sessionID = 2; // 会话标识
 }
+message BreakpointsReq {
+  int32 userID = 1;      // 用户编号
+  string sessionID = 2;  // 会话标识
+  int32 fileID = 3;      // 改哪个文件的断点，支持非主文件
+  repeated int32 lines = 4; // 该文件的全量断点行号，1 起始；空数组即清空该文件断点
+}
+
 message DebugStateRsp {
   string message = 1; // 返回信息
   int32 code     = 2; // 返回码
@@ -306,6 +298,7 @@ message DebugState {
   int32 exitCode = 6;  // 程序退出码
   string outputDelta = 7;  // 自上次调用以来的增量标准输出
   string errorDelta = 8;   // 自上次调用以来的增量标准错误
+  bool running = 9;      // 程序正在跑（Continue 之后还没停住）。此时 stopped=false 且 finished=false，前端要显示运行中而不是停在某行
 }
 message StackReq {
   int32 userID = 1;    // 用户编号

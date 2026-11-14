@@ -260,8 +260,6 @@ type IDERunServerService interface {
 	QueryRun(ctx context.Context, req *QueryRunReq) (*QueryRunRsp, error)
 	// QueryRunHistory QueryRunHistory 查询某项目的运行历史，按时间倒序
 	QueryRunHistory(ctx context.Context, req *QueryRunHistoryReq) (*QueryRunHistoryRsp, error)
-	// QueryRuntimeCapability QueryRuntimeCapability 探测沙箱可用性与工具链版本，前端据此置灰按钮、显示版本
-	QueryRuntimeCapability(ctx context.Context, req *QueryRuntimeCapabilityReq) (*QueryRuntimeCapabilityRsp, error)
 }
 
 func IDERunServerService_SubmitRun_Handler(svr interface{}, ctx context.Context, f server.FilterFunc) (interface{}, error) {
@@ -318,24 +316,6 @@ func IDERunServerService_QueryRunHistory_Handler(svr interface{}, ctx context.Co
 	return rsp, nil
 }
 
-func IDERunServerService_QueryRuntimeCapability_Handler(svr interface{}, ctx context.Context, f server.FilterFunc) (interface{}, error) {
-	req := &QueryRuntimeCapabilityReq{}
-	filters, err := f(req)
-	if err != nil {
-		return nil, err
-	}
-	handleFunc := func(ctx context.Context, reqbody interface{}) (interface{}, error) {
-		return svr.(IDERunServerService).QueryRuntimeCapability(ctx, reqbody.(*QueryRuntimeCapabilityReq))
-	}
-
-	var rsp interface{}
-	rsp, err = filters.Filter(ctx, req, handleFunc)
-	if err != nil {
-		return nil, err
-	}
-	return rsp, nil
-}
-
 // IDERunServerServer_ServiceDesc descriptor for server.RegisterService.
 var IDERunServerServer_ServiceDesc = server.ServiceDesc{
 	ServiceName: "oj.ide.IDERunServer",
@@ -353,10 +333,6 @@ var IDERunServerServer_ServiceDesc = server.ServiceDesc{
 			Name: "/oj.ide.IDERunServer/QueryRunHistory",
 			Func: IDERunServerService_QueryRunHistory_Handler,
 		},
-		{
-			Name: "/oj.ide.IDERunServer/QueryRuntimeCapability",
-			Func: IDERunServerService_QueryRuntimeCapability_Handler,
-		},
 	},
 }
 
@@ -373,6 +349,9 @@ type IDEDebugServerService interface {
 	StartDebug(ctx context.Context, req *StartDebugReq) (*StartDebugRsp, error)
 	// StopDebug StopDebug 结束会话并销毁容器
 	StopDebug(ctx context.Context, req *StopDebugReq) (*CommonRsp, error)
+	// UpdateBreakpoints UpdateBreakpoints 运行中改断点：按文件幂等覆盖，lines 为空即清空该文件断点。
+	//  没有它就只有 StartDebugReq.breakpoints 那一次机会，跑起来再点断点没接口可走
+	UpdateBreakpoints(ctx context.Context, req *BreakpointsReq) (*DebugStateRsp, error)
 	// StepOver StepOver 单步跳过（f10，不进入函数）
 	StepOver(ctx context.Context, req *StepDebugReq) (*DebugStateRsp, error)
 	// StepIn StepIn 单步进入（f11，进入函数内部）
@@ -419,6 +398,24 @@ func IDEDebugServerService_StopDebug_Handler(svr interface{}, ctx context.Contex
 	}
 	handleFunc := func(ctx context.Context, reqbody interface{}) (interface{}, error) {
 		return svr.(IDEDebugServerService).StopDebug(ctx, reqbody.(*StopDebugReq))
+	}
+
+	var rsp interface{}
+	rsp, err = filters.Filter(ctx, req, handleFunc)
+	if err != nil {
+		return nil, err
+	}
+	return rsp, nil
+}
+
+func IDEDebugServerService_UpdateBreakpoints_Handler(svr interface{}, ctx context.Context, f server.FilterFunc) (interface{}, error) {
+	req := &BreakpointsReq{}
+	filters, err := f(req)
+	if err != nil {
+		return nil, err
+	}
+	handleFunc := func(ctx context.Context, reqbody interface{}) (interface{}, error) {
+		return svr.(IDEDebugServerService).UpdateBreakpoints(ctx, reqbody.(*BreakpointsReq))
 	}
 
 	var rsp interface{}
@@ -605,6 +602,10 @@ var IDEDebugServerServer_ServiceDesc = server.ServiceDesc{
 			Func: IDEDebugServerService_StopDebug_Handler,
 		},
 		{
+			Name: "/oj.ide.IDEDebugServer/UpdateBreakpoints",
+			Func: IDEDebugServerService_UpdateBreakpoints_Handler,
+		},
+		{
 			Name: "/oj.ide.IDEDebugServer/StepOver",
 			Func: IDEDebugServerService_StepOver_Handler,
 		},
@@ -716,11 +717,6 @@ func (s *UnimplementedIDERunServer) QueryRunHistory(ctx context.Context, req *Qu
 	return nil, errors.New("rpc QueryRunHistory of service IDERunServer is not implemented")
 }
 
-// QueryRuntimeCapability QueryRuntimeCapability 探测沙箱可用性与工具链版本，前端据此置灰按钮、显示版本
-func (s *UnimplementedIDERunServer) QueryRuntimeCapability(ctx context.Context, req *QueryRuntimeCapabilityReq) (*QueryRuntimeCapabilityRsp, error) {
-	return nil, errors.New("rpc QueryRuntimeCapability of service IDERunServer is not implemented")
-}
-
 type UnimplementedIDEDebugServer struct{}
 
 // StartDebug StartDebug 建会话：上传代码快照、以 -g -O0 编译、起 gdb、停在第一个断点
@@ -731,6 +727,13 @@ func (s *UnimplementedIDEDebugServer) StartDebug(ctx context.Context, req *Start
 // StopDebug StopDebug 结束会话并销毁容器
 func (s *UnimplementedIDEDebugServer) StopDebug(ctx context.Context, req *StopDebugReq) (*CommonRsp, error) {
 	return nil, errors.New("rpc StopDebug of service IDEDebugServer is not implemented")
+}
+
+// UpdateBreakpoints UpdateBreakpoints 运行中改断点：按文件幂等覆盖，lines 为空即清空该文件断点。
+//
+//	没有它就只有 StartDebugReq.breakpoints 那一次机会，跑起来再点断点没接口可走
+func (s *UnimplementedIDEDebugServer) UpdateBreakpoints(ctx context.Context, req *BreakpointsReq) (*DebugStateRsp, error) {
+	return nil, errors.New("rpc UpdateBreakpoints of service IDEDebugServer is not implemented")
 }
 
 // StepOver StepOver 单步跳过（f10，不进入函数）
@@ -1003,8 +1006,6 @@ type IDERunServerClientProxy interface {
 	QueryRun(ctx context.Context, req *QueryRunReq, opts ...client.Option) (rsp *QueryRunRsp, err error)
 	// QueryRunHistory QueryRunHistory 查询某项目的运行历史，按时间倒序
 	QueryRunHistory(ctx context.Context, req *QueryRunHistoryReq, opts ...client.Option) (rsp *QueryRunHistoryRsp, err error)
-	// QueryRuntimeCapability QueryRuntimeCapability 探测沙箱可用性与工具链版本，前端据此置灰按钮、显示版本
-	QueryRuntimeCapability(ctx context.Context, req *QueryRuntimeCapabilityReq, opts ...client.Option) (rsp *QueryRuntimeCapabilityRsp, err error)
 }
 
 type IDERunServerClientProxyImpl struct {
@@ -1076,32 +1077,15 @@ func (c *IDERunServerClientProxyImpl) QueryRunHistory(ctx context.Context, req *
 	return rsp, nil
 }
 
-func (c *IDERunServerClientProxyImpl) QueryRuntimeCapability(ctx context.Context, req *QueryRuntimeCapabilityReq, opts ...client.Option) (*QueryRuntimeCapabilityRsp, error) {
-	ctx, msg := codec.WithCloneMessage(ctx)
-	defer codec.PutBackMessage(msg)
-	msg.WithClientRPCName("/oj.ide.IDERunServer/QueryRuntimeCapability")
-	msg.WithCalleeServiceName(IDERunServerServer_ServiceDesc.ServiceName)
-	msg.WithCalleeApp("")
-	msg.WithCalleeServer("")
-	msg.WithCalleeService("IDERunServer")
-	msg.WithCalleeMethod("QueryRuntimeCapability")
-	msg.WithSerializationType(codec.SerializationTypePB)
-	callopts := make([]client.Option, 0, len(c.opts)+len(opts))
-	callopts = append(callopts, c.opts...)
-	callopts = append(callopts, opts...)
-	rsp := &QueryRuntimeCapabilityRsp{}
-	if err := c.client.Invoke(ctx, req, rsp, callopts...); err != nil {
-		return nil, err
-	}
-	return rsp, nil
-}
-
 // IDEDebugServerClientProxy defines service client proxy
 type IDEDebugServerClientProxy interface {
 	// StartDebug StartDebug 建会话：上传代码快照、以 -g -O0 编译、起 gdb、停在第一个断点
 	StartDebug(ctx context.Context, req *StartDebugReq, opts ...client.Option) (rsp *StartDebugRsp, err error)
 	// StopDebug StopDebug 结束会话并销毁容器
 	StopDebug(ctx context.Context, req *StopDebugReq, opts ...client.Option) (rsp *CommonRsp, err error)
+	// UpdateBreakpoints UpdateBreakpoints 运行中改断点：按文件幂等覆盖，lines 为空即清空该文件断点。
+	//  没有它就只有 StartDebugReq.breakpoints 那一次机会，跑起来再点断点没接口可走
+	UpdateBreakpoints(ctx context.Context, req *BreakpointsReq, opts ...client.Option) (rsp *DebugStateRsp, err error)
 	// StepOver StepOver 单步跳过（f10，不进入函数）
 	StepOver(ctx context.Context, req *StepDebugReq, opts ...client.Option) (rsp *DebugStateRsp, err error)
 	// StepIn StepIn 单步进入（f11，进入函数内部）
@@ -1165,6 +1149,26 @@ func (c *IDEDebugServerClientProxyImpl) StopDebug(ctx context.Context, req *Stop
 	callopts = append(callopts, c.opts...)
 	callopts = append(callopts, opts...)
 	rsp := &CommonRsp{}
+	if err := c.client.Invoke(ctx, req, rsp, callopts...); err != nil {
+		return nil, err
+	}
+	return rsp, nil
+}
+
+func (c *IDEDebugServerClientProxyImpl) UpdateBreakpoints(ctx context.Context, req *BreakpointsReq, opts ...client.Option) (*DebugStateRsp, error) {
+	ctx, msg := codec.WithCloneMessage(ctx)
+	defer codec.PutBackMessage(msg)
+	msg.WithClientRPCName("/oj.ide.IDEDebugServer/UpdateBreakpoints")
+	msg.WithCalleeServiceName(IDEDebugServerServer_ServiceDesc.ServiceName)
+	msg.WithCalleeApp("")
+	msg.WithCalleeServer("")
+	msg.WithCalleeService("IDEDebugServer")
+	msg.WithCalleeMethod("UpdateBreakpoints")
+	msg.WithSerializationType(codec.SerializationTypePB)
+	callopts := make([]client.Option, 0, len(c.opts)+len(opts))
+	callopts = append(callopts, c.opts...)
+	callopts = append(callopts, opts...)
+	rsp := &DebugStateRsp{}
 	if err := c.client.Invoke(ctx, req, rsp, callopts...); err != nil {
 		return nil, err
 	}

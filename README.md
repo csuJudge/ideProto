@@ -51,5 +51,23 @@ WebIDE（在线 IDE）的 tRPC 契约仓库。与 judgeProto 完全独立，互�
 
 - 字段号只增不改不复用；删字段留 reserved。
 - 枚举 0 值一律留给 Unspecified。
-- ide_run.status 是 WebIDE 专用口径（0 排队…8 执行异常），**不复用** solution 的 result 码（那套 4=AC）。
+- `ide_run.status` **与平台 `solution.result` 同码**，前端 `genResult()`（`pljp_frontend/src/assets/js/tool/common.js:49`）可直接复用：
+  `1` 排队中（`<2` 即待判）· `2` 正在编译 · `3` 判断中（本场景=运行中）· `4` 正确（仅编译模式=编译通过）· `7` 时间超限 · `8` 内存超限 · `9` 输出超限 · `10` 运行错误 · `11` 编译错误。
+  `5 格式错误`/`6 答案错误` 不使用（需要标准输出对照）。码表出处除前端那份，还有 `judge-daemon` 二进制里的 `WHERE s.result < 2`。
+  v0.0.1 曾自造一套 0…8，v0.0.2 起废弃——当时无调用方，故未做兼容。
 - 所有 Rsp 带 message + code，由网关转换成平台统一的 10000 成功码。
+- 职责边界：`IDEServer` 与 `IDERunServer` 由 oj_ide_svr 实现，**它只往库里插入与查询**；
+  `ide_run` 的状态与输出由 ide_judge 守护进程 UPDATE 回填。`IDEDebugServer` 由 ide_judge 实现
+  （会话绑容器绑 gdb 进程），svr 侧只做转发。一期调试仅 C/C++。
+
+## 变更记录
+
+### v0.0.2
+
+- 删除 `QueryRuntimeCapability` 及其 Req/Rsp：沙箱能力与工具链版本只有持有 Docker 的进程探得到，
+  而 svr 不再碰 Docker。前端要显示的"沙箱可出网、禁校内网"等文案改由前端持有
+- `status` 换成 `solution.result` 码表（见上）
+- `StartDebugReq` 加 `input`：缺它被调试程序一 `scanf` 就死等
+- 新增 `UpdateBreakpoints`：原来跑起来之后没有任何接口能改断点
+- `DebugState` 加 `running`：Continue 之后"在跑还没停"这个状态原来表达不出来
+- rpc 删除不留 reserved（proto3 的 reserved 只管字段号，服务方法名不存在复用问题）

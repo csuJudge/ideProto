@@ -238,21 +238,6 @@ func (mr *MockIDERunServerServiceMockRecorder) QueryRunHistory(ctx, req any) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryRunHistory", reflect.TypeOf((*MockIDERunServerService)(nil).QueryRunHistory), ctx, req)
 }
 
-// QueryRuntimeCapability mocks base method.
-func (m *MockIDERunServerService) QueryRuntimeCapability(ctx context.Context, req *QueryRuntimeCapabilityReq) (*QueryRuntimeCapabilityRsp, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "QueryRuntimeCapability", ctx, req)
-	ret0, _ := ret[0].(*QueryRuntimeCapabilityRsp)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// QueryRuntimeCapability indicates an expected call of QueryRuntimeCapability.
-func (mr *MockIDERunServerServiceMockRecorder) QueryRuntimeCapability(ctx, req any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryRuntimeCapability", reflect.TypeOf((*MockIDERunServerService)(nil).QueryRuntimeCapability), ctx, req)
-}
-
 // SubmitRun mocks base method.
 func (m *MockIDERunServerService) SubmitRun(ctx context.Context, req *SubmitRunReq) (*SubmitRunRsp, error) {
 	m.ctrl.T.Helper()
@@ -459,6 +444,21 @@ func (m *MockIDEDebugServerService) StopDebug(ctx context.Context, req *StopDebu
 func (mr *MockIDEDebugServerServiceMockRecorder) StopDebug(ctx, req any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StopDebug", reflect.TypeOf((*MockIDEDebugServerService)(nil).StopDebug), ctx, req)
+}
+
+// UpdateBreakpoints mocks base method.
+func (m *MockIDEDebugServerService) UpdateBreakpoints(ctx context.Context, req *BreakpointsReq) (*DebugStateRsp, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateBreakpoints", ctx, req)
+	ret0, _ := ret[0].(*DebugStateRsp)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateBreakpoints indicates an expected call of UpdateBreakpoints.
+func (mr *MockIDEDebugServerServiceMockRecorder) UpdateBreakpoints(ctx, req any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateBreakpoints", reflect.TypeOf((*MockIDEDebugServerService)(nil).UpdateBreakpoints), ctx, req)
 }
 
 // MockIDEServerClientProxy is a mock of IDEServerClientProxy interface.
@@ -737,26 +737,6 @@ func (mr *MockIDERunServerClientProxyMockRecorder) QueryRunHistory(ctx, req any,
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryRunHistory", reflect.TypeOf((*MockIDERunServerClientProxy)(nil).QueryRunHistory), varargs...)
 }
 
-// QueryRuntimeCapability mocks base method.
-func (m *MockIDERunServerClientProxy) QueryRuntimeCapability(ctx context.Context, req *QueryRuntimeCapabilityReq, opts ...client.Option) (*QueryRuntimeCapabilityRsp, error) {
-	m.ctrl.T.Helper()
-	varargs := []any{ctx, req}
-	for _, a := range opts {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "QueryRuntimeCapability", varargs...)
-	ret0, _ := ret[0].(*QueryRuntimeCapabilityRsp)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// QueryRuntimeCapability indicates an expected call of QueryRuntimeCapability.
-func (mr *MockIDERunServerClientProxyMockRecorder) QueryRuntimeCapability(ctx, req any, opts ...any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{ctx, req}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryRuntimeCapability", reflect.TypeOf((*MockIDERunServerClientProxy)(nil).QueryRuntimeCapability), varargs...)
-}
-
 // SubmitRun mocks base method.
 func (m *MockIDERunServerClientProxy) SubmitRun(ctx context.Context, req *SubmitRunReq, opts ...client.Option) (*SubmitRunRsp, error) {
 	m.ctrl.T.Helper()
@@ -1023,4 +1003,24 @@ func (mr *MockIDEDebugServerClientProxyMockRecorder) StopDebug(ctx, req any, opt
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{ctx, req}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StopDebug", reflect.TypeOf((*MockIDEDebugServerClientProxy)(nil).StopDebug), varargs...)
+}
+
+// UpdateBreakpoints mocks base method.
+func (m *MockIDEDebugServerClientProxy) UpdateBreakpoints(ctx context.Context, req *BreakpointsReq, opts ...client.Option) (*DebugStateRsp, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, req}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "UpdateBreakpoints", varargs...)
+	ret0, _ := ret[0].(*DebugStateRsp)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateBreakpoints indicates an expected call of UpdateBreakpoints.
+func (mr *MockIDEDebugServerClientProxyMockRecorder) UpdateBreakpoints(ctx, req any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, req}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateBreakpoints", reflect.TypeOf((*MockIDEDebugServerClientProxy)(nil).UpdateBreakpoints), varargs...)
 }
