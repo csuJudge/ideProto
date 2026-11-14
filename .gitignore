@@ -1,0 +1,10 @@
+.idea/
+.DS_Store
+
+# trpc-cmdline 生成 server 脚手架时的中间产物目录，不入库（funcProblemProto/objectiveProto 里
+# 就是因为它入库了，仓库里躺着 out/stub/... 一堆垃圾）。本仓库只发布 proto 库，不生成脚手架。
+out/
+
+# Go 依赖校验和：库模块的 go.sum 不会被下游使用（消费方只认自己主模块的 go.sum），
+# 沿用 judgeProto v1.6.8 之后的约定不入库。
+go.sum

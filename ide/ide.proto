@@ -1,0 +1,364 @@
+syntax = "proto3";
+option go_package = "github.com/csuJudge/ideProto/ide";
+
+package oj.ide;
+
+// IDEServer：项目与文件的增删改查。纯 CRUD 无状态，不依赖容器，
+// 沙箱不可用时这一组接口依然可用，前端不能置灰它。
+service IDEServer {
+  // QueryProjectList 查询项目列表（只回项目层信息，不回文件内容）
+  rpc QueryProjectList(QueryProjectListReq) returns (QueryProjectListRsp) {}
+  // AddProject 新建项目，同用户下项目名不可重复
+  rpc AddProject(AddProjectReq) returns (AddProjectRsp) {}
+  // UpdateProject 修改项目名称或描述
+  rpc UpdateProject(UpdateProjectReq) returns (CommonRsp) {}
+  // UpdateProjectStatus 更新项目状态，status=-1 为软删除
+  rpc UpdateProjectStatus(UpdateProjectStatusReq) returns (CommonRsp) {}
+  // QueryProject 查询单个项目，withContent=true 时连文件内容一起回
+  rpc QueryProject(QueryProjectReq) returns (QueryProjectRsp) {}
+  // AddFile 在指定项目下新建文件
+  rpc AddFile(AddFileReq) returns (AddFileRsp) {}
+  // UpdateFile 修改文件内容、路径或语言
+  rpc UpdateFile(UpdateFileReq) returns (CommonRsp) {}
+  // UpdateFileStatus 更新文件状态，status=-1 为软删除
+  rpc UpdateFileStatus(UpdateFileStatusReq) returns (CommonRsp) {}
+  // QueryImportableFiles 题目页「从 WebIDE 导入」用，两级选择后取文件全文
+  rpc QueryImportableFiles(QueryImportableFilesReq) returns (QueryImportableFilesRsp) {}
+}
+
+// IDERunServer：编译与运行。每次执行起一个容器沙箱，
+// Docker 或运行时镜像异常时这一组接口整体降级。
+service IDERunServer {
+  // SubmitRun 提交一次编译或运行，落队列表后立即返回 runID，不阻塞
+  rpc SubmitRun(SubmitRunReq) returns (SubmitRunRsp) {}
+  // QueryRun 按 runID 轮询本次编译运行的状态与输出
+  rpc QueryRun(QueryRunReq) returns (QueryRunRsp) {}
+  // QueryRunHistory 查询某项目的运行历史，按时间倒序
+  rpc QueryRunHistory(QueryRunHistoryReq) returns (QueryRunHistoryRsp) {}
+  // QueryRuntimeCapability 探测沙箱可用性与工具链版本，前端据此置灰按钮、显示版本
+  rpc QueryRuntimeCapability(QueryRuntimeCapabilityReq) returns (QueryRuntimeCapabilityRsp) {}
+}
+
+// IDEDebugServer：交互式单步调试。会话有状态，绑定一个长驻沙箱容器与其中的 gdb/MI 进程，
+// 是三者中唯一可能单独拆进程部署的一块。会话空闲超时会回收，服务重启后旧会话一律失效。
+service IDEDebugServer {
+  // StartDebug 建会话：上传代码快照、以 -g -O0 编译、起 gdb、停在第一个断点
+  rpc StartDebug(StartDebugReq) returns (StartDebugRsp) {}
+  // StopDebug 结束会话并销毁容器
+  rpc StopDebug(StopDebugReq) returns (CommonRsp) {}
+  // StepOver 单步跳过（f10，不进入函数）
+  rpc StepOver(StepDebugReq) returns (DebugStateRsp) {}
+  // StepIn 单步进入（f11，进入函数内部）
+  rpc StepIn(StepDebugReq) returns (DebugStateRsp) {}
+  // StepOut 单步跳出（shift+f11，跑完当前函数回到调用处）
+  rpc StepOut(StepDebugReq) returns (DebugStateRsp) {}
+  // ContinueDebug 继续运行，停在下一个断点或程序结束
+  rpc ContinueDebug(StepDebugReq) returns (DebugStateRsp) {}
+  // PauseDebug 运行中强行暂停
+  rpc PauseDebug(StepDebugReq) returns (DebugStateRsp) {}
+  // GetStackFrames 查询当前调用栈
+  rpc GetStackFrames(StackReq) returns (StackRsp) {}
+  // GetVariables 查询变量，variableID 非 0 时展开该引用
+  rpc GetVariables(VarsReq) returns (VarsRsp) {}
+  // Evaluate 在当前帧求值一个表达式（监视表达式）
+  rpc Evaluate(EvaluateReq) returns (EvaluateRsp) {}
+  // QueryDebugOutput 取被调试程序的全量输出（增量在 DebugState 里给）
+  rpc QueryDebugOutput(OutputReq) returns (OutputRsp) {}
+}
+
+message CommonRsp {
+  string message = 1; // 返回信息
+  int32 code     = 2; // 返回码（平台统一 10000 成功，网关侧转换）
+}
+
+// IDEFile 单个文件的快照。被查询项目、提交运行、导入查询、启动调试四处复用，
+// 因此与 project/run/debug 放在同一个文件里，不做跨文件 import。
+message IDEFile {
+  int32 fileID     = 1; // 文件编号，0 表示编辑器里尚未保存的新文件
+  string path      = 2; // 项目内相对路径，如 Main.cpp 或 src/util.cpp
+  int32 language   = 3; // 语言：0=C 1=C++ 2=Java 3=Python
+  string content   = 4; // 代码内容（UTF-8；trpc 内部不加密，网关与浏览器之间走 AES）
+  int32 size       = 5; // 字节数
+  string updatedTime = 6; // 最后更新时间
+}
+
+// IDEProject 项目。withContent=false 时 files 里的 content 留空，避免列表接口拖全量代码
+message IDEProject {
+  int32 projectID  = 1; // 项目编号
+  string name      = 2; // 项目名称
+  string description = 3; // 项目描述
+  int32 fileCount  = 4; // 有效文件数
+  repeated IDEFile files = 5; // 文件列表
+  string createdTime = 6; // 创建时间
+  string updatedTime = 7; // 更新时间
+}
+
+// ---------------- 项目 ----------------
+
+message QueryProjectListReq {
+  int32 userID = 1;   // 用户编号
+  string keyword = 2; // 按项目名模糊查询，空表示不过滤
+  int32 page     = 3; // 页码，从 1 开始
+  int32 limit    = 4; // 每页条数
+}
+message QueryProjectListRsp {
+  string message = 1; // 返回信息
+  int32 code     = 2; // 返回码
+  repeated IDEProject projects = 3; // 项目列表，不含文件内容
+  int32 total    = 4; // 符合条件的总条数
+}
+message AddProjectReq {
+  int32 userID = 1;   // 用户编号
+  string name  = 2;   // 项目名称，1-50 字，同用户下不可重名
+  string description = 3; // 项目描述，可空
+}
+message AddProjectRsp {
+  string message = 1;  // 返回信息
+  int32 code     = 2;  // 返回码
+  int32 projectID = 3; // 新建出来的项目编号
+}
+message UpdateProjectReq {
+  int32 userID = 1;    // 用户编号
+  int32 projectID = 2; // 项目编号
+  string name  = 3;    // 新项目名称，空表示不改名
+  string description = 4; // 新项目描述，空表示不改描述
+}
+message UpdateProjectStatusReq {
+  int32 userID = 1;    // 用户编号
+  int32 projectID = 2; // 项目编号
+  int32 status   = 3;  // 状态：-1=删除
+}
+message QueryProjectReq {
+  int32 userID = 1;    // 用户编号
+  int32 projectID = 2; // 项目编号
+  bool withContent = 3; // 是否连文件内容一起回
+}
+message QueryProjectRsp {
+  string message = 1;  // 返回信息
+  int32 code     = 2;  // 返回码
+  IDEProject project = 3; // 项目详情
+}
+
+// ---------------- 文件 ----------------
+
+message AddFileReq {
+  int32 userID = 1;    // 用户编号
+  int32 projectID = 2; // 项目编号
+  string path    = 3;  // 项目内相对路径，只允许字母数字下划线中划线点斜杠，禁 .. 与绝对路径，最多一层目录
+  int32 language = 4;  // 语言：0=C 1=C++ 2=Java 3=Python，前端可按扩展名推断后带入
+  string content = 5;  // 初始内容，空则建空文件
+}
+message AddFileRsp {
+  string message = 1; // 返回信息
+  int32 code     = 2; // 返回码
+  int32 fileID   = 3; // 新建出来的文件编号
+}
+message UpdateFileReq {
+  int32 userID = 1;    // 用户编号
+  int32 projectID = 2; // 项目编号
+  int32 fileID   = 3;  // 文件编号
+  string path    = 4;  // 新路径（重命名/移动），空表示不改
+  int32 language = 5;  // 新语言，-1 表示不改
+  string content = 6;  // 新内容，空表示不改
+}
+message UpdateFileStatusReq {
+  int32 userID = 1;    // 用户编号
+  int32 projectID = 2; // 项目编号
+  int32 fileID   = 3;  // 文件编号
+  int32 status   = 4;  // 状态：-1=删除
+}
+
+// ---------------- 导入到题目页编辑器 ----------------
+
+message QueryImportableFilesReq {
+  int32 userID = 1;     // 用户编号，服务端只按此编号过滤，取不到别人的文件
+  int32 projectID = 2;  // 项目编号，0 表示只回项目层（对话框第一级选择）
+  bool withContent = 3; // 是否回文件全文（确认导入时为 true）
+  int32 fileID   = 4;   // 文件编号，withContent=true 时必填
+  int32 language = 5;   // 语言过滤，-1 表示不过滤；否则只回该语言文件
+}
+message QueryImportableFilesRsp {
+  string message = 1;   // 返回信息
+  int32 code     = 2;   // 返回码
+  repeated IDEProject projects = 3; // 项目层列表（projectID 传 0 时回这一层）
+  repeated IDEFile files = 4;       // 文件层列表，withContent=false 时 content 为空
+  string content = 5;   // 文件全文（确认导入时回）
+  string fileName = 6;  // 该文件的路径名
+  int32 fileLanguage = 7; // 该文件的语言，供前端切换编辑器语言
+}
+
+// ---------------- 运行 / 编译 ----------------
+
+message SubmitRunReq {
+  int32 userID = 1;     // 用户编号
+  int32 projectID = 2;  // 项目编号
+  int32 fileID   = 3;   // 主文件编号（Python 只跑它；C/C++/Java 以它为主入口）
+  int32 language = 4;   // 语言：0=C 1=C++ 2=Java 3=Python
+  int32 mode     = 5;   // 模式：1=仅编译 2=编译+运行
+  string input   = 6;   // 标准输入，mode=2 时有效
+  repeated IDEFile files = 7; // 全量文件快照，编辑器里未保存的内容也在这里
+  int32 timeLimitMs = 8;  // 运行时限毫秒，0 表示用服务端默认
+  int32 memoryLimitMb = 9; // 内存上限兆，0 表示用服务端默认
+}
+message SubmitRunRsp {
+  string message = 1; // 返回信息
+  int32 code     = 2; // 返回码
+  int32 runID    = 3; // 本次运行编号，拿它去轮询 QueryRun
+}
+message QueryRunReq {
+  int32 userID = 1; // 用户编号
+  int32 runID  = 2; // 运行编号
+}
+message QueryRunRsp {
+  string message = 1;   // 返回信息
+  int32 code     = 2;   // 返回码
+  int32 runID    = 3;   // 运行编号
+  int32 status   = 4;   // 状态：0=排队 1=编译中 2=运行中 3=成功 4=编译错误 5=运行错误 6=超时 7=超内存 8=执行异常
+  string compileInfo = 5; // 编译输出（含报错与警告）
+  string output = 6;    // 标准输出
+  string errorOutput = 7; // 标准错误
+  int32 exitCode = 8;   // 进程退出码
+  int64 timeCost = 9;   // 运行耗时，毫秒
+  int32 memoryCost = 10; // 峰值内存，KB（含运行时开销，前端标注仅供参考）
+  bool truncated = 11;  // 输出超过上限被截断
+  string createdTime = 12; // 提交时间
+}
+message QueryRunHistoryReq {
+  int32 userID = 1;    // 用户编号
+  int32 projectID = 2; // 项目编号
+  int32 page     = 3;  // 页码，从 1 开始
+  int32 limit    = 4;  // 每页条数
+}
+message QueryRunHistoryRsp {
+  string message = 1; // 返回信息
+  int32 code     = 2; // 返回码
+  repeated RunRecord records = 3; // 历史记录，按提交时间倒序
+  int32 total    = 4; // 总条数
+}
+message RunRecord {
+  int32 runID    = 1; // 运行编号
+  int32 fileID   = 2; // 主文件编号
+  string fileName = 3; // 主文件名
+  int32 language = 4; // 语言
+  int32 mode     = 5; // 模式：1=仅编译 2=编译+运行
+  int32 status   = 6; // 状态，口径同 QueryRunRsp.status
+  int64 timeCost = 7; // 运行耗时，毫秒
+  int32 memoryCost = 8; // 峰值内存，KB
+  string createdTime = 9; // 提交时间
+}
+
+// ---------------- 运行时能力 ----------------
+
+message QueryRuntimeCapabilityReq {
+  int32 userID = 1;   // 用户编号
+  int32 language = 2; // 语言，-1 表示查全部
+}
+message QueryRuntimeCapabilityRsp {
+  string message = 1; // 返回信息
+  int32 code     = 2; // 返回码
+  bool available = 3; // 沙箱整体是否可用，false 时前端置灰运行与编译
+  bool compileSupported = 4; // 该语言是否支持编译
+  bool runSupported = 5;     // 该语言是否支持运行
+  bool debugSupported = 6;   // 该语言是否支持调试，false 时前端隐藏调试
+  repeated int32 supportedLanguages = 7; // 支持的语言列表
+  string toolchainInfo = 8;  // 镜像内实测版本，如 "gcc 13.3.0 / gdb 15.1 / OpenJDK 11.0.33 / Python 3.12.3"
+  string unavailableReason = 9; // 不可用原因，给用户看
+  bool networkEnabled = 10;  // 沙箱是否放行出网
+  string sandboxNotice = 11; // 常驻提示，如"沙箱可访问公网，禁止访问校内网"
+}
+
+// ---------------- 调试 ----------------
+
+message StartDebugReq {
+  int32 userID = 1;    // 用户编号
+  int32 projectID = 2; // 项目编号
+  int32 fileID   = 3;  // 主文件编号
+  int32 language = 4;  // 语言：0=C 1=C++ 2=Java 3=Python（当前仅支持 0 和 1）
+  repeated IDEFile files = 5; // 全量文件快照，含未保存内容
+  string programArgs = 6;     // 传给被调试程序的命令行参数
+  repeated int32 breakpoints = 7; // 主文件断点行号，1 起始
+}
+message StartDebugRsp {
+  string message = 1;  // 返回信息
+  int32 code     = 2;  // 返回码
+  string sessionID = 3; // 会话标识，后续所有调试命令带它
+  DebugState state = 4; // 建会话后的初始停住位置（编译失败时 finished=true 并带错误输出）
+}
+message StopDebugReq {
+  int32 userID = 1;    // 用户编号
+  string sessionID = 2; // 会话标识
+}
+message StepDebugReq {
+  int32 userID = 1;    // 用户编号
+  string sessionID = 2; // 会话标识
+}
+message DebugStateRsp {
+  string message = 1; // 返回信息
+  int32 code     = 2; // 返回码
+  DebugState state = 3; // 本次命令之后的调试器状态
+}
+message DebugState {
+  bool stopped = 1;    // 是否停在某一行，true 时前端高亮 fileName:line
+  int32 fileID = 2;    // 停住所在文件编号（跨文件单步时用于切换编辑器标签页）
+  string fileName = 3; // 停住所在文件名
+  int32 line = 4;      // 停住所在行号，1 起始
+  bool finished = 5;   // 程序已结束
+  int32 exitCode = 6;  // 程序退出码
+  string outputDelta = 7;  // 自上次调用以来的增量标准输出
+  string errorDelta = 8;   // 自上次调用以来的增量标准错误
+}
+message StackReq {
+  int32 userID = 1;    // 用户编号
+  string sessionID = 2; // 会话标识
+}
+message StackRsp {
+  string message = 1; // 返回信息
+  int32 code     = 2; // 返回码
+  repeated StackFrame frames = 3; // 调用栈，栈顶在前
+}
+message StackFrame {
+  int32 frameID = 1;   // 帧编号，查变量与求值时带它
+  string name = 2;     // 函数名
+  string fileName = 3; // 所在文件
+  int32 line = 4;      // 所在行号
+}
+message VarsReq {
+  int32 userID = 1;     // 用户编号
+  string sessionID = 2; // 会话标识
+  int32 frameID = 3;    // 帧编号，0 表示当前帧
+  int32 variableID = 4; // 变量引用编号，0 表示取顶层，非 0 表示展开该引用
+}
+message VarsRsp {
+  string message = 1; // 返回信息
+  int32 code     = 2; // 返回码
+  repeated Variable variables = 3; // 变量列表
+}
+message Variable {
+  int32 variableID = 1; // 变量引用编号，用于再往下展开
+  string name = 2;      // 变量名
+  string value = 3;     // 变量值（已按类型转成文本）
+  string type = 4;      // 类型名
+  bool expandable = 5;  // 是否可再展开（结构体、指针、数组）
+}
+message EvaluateReq {
+  int32 userID = 1;     // 用户编号
+  string sessionID = 2; // 会话标识
+  int32 frameID = 3;    // 帧编号，0 表示当前帧
+  string expression = 4; // 表达式，服务端限长 200 字符
+}
+message EvaluateRsp {
+  string message = 1; // 返回信息
+  int32 code     = 2; // 返回码
+  string result = 3;  // 求值结果
+  string error = 4;   // 求值失败原因（与 message 分开：前者给用户看，后者给日志看）
+}
+message OutputReq {
+  int32 userID = 1;    // 用户编号
+  string sessionID = 2; // 会话标识
+}
+message OutputRsp {
+  string message = 1; // 返回信息
+  int32 code     = 2; // 返回码
+  string output = 3;  // 被调试程序的全量标准输出
+  string errorOutput = 4; // 被调试程序的全量标准错误
+}
