@@ -8,7 +8,7 @@ package oj.ide;
 service IDEServer {
   // QueryProjectList 查询项目列表（只回项目层信息，不回文件内容）
   rpc QueryProjectList(QueryProjectListReq) returns (QueryProjectListRsp) {}
-  // AddProject 新建项目，同用户下项目名不可重复
+  // AddProject 新建项目；同用户下项目名已占用时不报错，返回已有项目的编号
   rpc AddProject(AddProjectReq) returns (AddProjectRsp) {}
   // UpdateProject 修改项目名称或描述
   rpc UpdateProject(UpdateProjectReq) returns (CommonRsp) {}
@@ -113,7 +113,7 @@ message QueryProjectListRsp {
 }
 message AddProjectReq {
   int32 userID = 1;   // 用户编号
-  string name  = 2;   // 项目名称，1-50 字，同用户下不可重名
+  string name  = 2;   // 项目名称，1-50 字，同用户下重名即复用已有项目
   string description = 3; // 项目描述，可空
 }
 message AddProjectRsp {
